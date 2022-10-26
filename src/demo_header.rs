@@ -5,11 +5,16 @@ use crate::HL2_MAX_OS_PATH;
 pub const DEMO_PROTOCOL: i32 = 3;
 pub const DEMO_HEADER_ID: &[u8] = b"HL2DEMO\0";
 
-/// Total number of bytes to read from .dem
-/// file to extract the header info.
-/// 24 for all numeric fields + 1040 for 4
-/// filesystem paths.
-pub const DEMO_HEADER_BYTES_LEN: i32 = 24 + 1040;
+/// Standard 4 bytes for integers and floats
+const INT_LEN: usize = 4;
+
+/// Total number of bytes to read from .dem file to extract the header info.
+///
+/// Accounts for:
+/// - standard demo id (fixed 8 bytes header)
+/// - 6 int/float numbers to read (4 bytes each)
+/// - 4 strings of data (260 bytes each)
+pub const DEMO_HEADER_BYTES_LEN: usize = (6 * INT_LEN) + (HL2_MAX_OS_PATH * 4) + DEMO_HEADER_ID.len();
 
 #[derive(Debug)]
 pub struct DemoHeader {
@@ -45,7 +50,7 @@ impl DemoHeader {
         };
 
         if header != DEMO_HEADER_ID {
-            bail!("expected hl2 demo");
+            bail!("expected hl2 demo")
         }
 
         let demo_protocol = {
@@ -108,8 +113,13 @@ impl DemoHeader {
 
         let sign_on_length = {
             let b = &buf[cur..(cur + 4)];
+            cur += 4;
             i32::from_ne_bytes([b[0], b[1], b[2], b[3]])
         };
+
+        if cur != DEMO_HEADER_BYTES_LEN {
+            bail!("bytes actually read from the header and bytes expected to read were different?")
+        }
 
         Ok(DemoHeader {
             demo_protocol,
