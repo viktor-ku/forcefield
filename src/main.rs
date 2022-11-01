@@ -1,5 +1,6 @@
-use anyhow::Result;
-use std::fs;
+use anyhow::{Result, bail};
+use std::{fs, path::PathBuf};
+use clap::{Subcommand, Parser};
 
 mod demo_header;
 use demo_header::DemoHeader;
@@ -68,8 +69,20 @@ fn body(buf: &[u8]) {
     // }
 }
 
+#[derive(Debug, Parser)]
+struct Cli {
+    /// path to the demo file (.dem) to inspect
+    dem: PathBuf
+}
+
 fn main() -> Result<()> {
-    let buf = fs::read("./stuff.dem")?;
+    let cli = Cli::parse();
+
+    if !cli.dem.is_file() {
+        bail!(".dem file appears to be not a file?")
+    }
+
+    let buf = fs::read(cli.dem)?;
 
     let header = DemoHeader::read(&buf)?;
     println!("{:#?}", header);
