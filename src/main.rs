@@ -1,11 +1,9 @@
 use anyhow::{bail, Result};
-use clap::{Parser, Subcommand};
-use std::{fs, path::PathBuf};
+use clap::Parser;
+use std::{fs, mem::MaybeUninit, path::PathBuf, ptr::write_bytes};
 
 mod demo_header;
 use demo_header::DemoHeader;
-
-use crate::demo_header::DEMO_HEADER_BYTES_LEN;
 
 pub const HL2_MAX_OS_PATH: usize = 260;
 
@@ -97,8 +95,6 @@ fn main() -> Result<()> {
 
     let header = DemoHeader::read(&buf)?;
     println!("{:#?}", header);
-
-    body(&buf[DEMO_HEADER_BYTES_LEN..]);
 
     Ok(())
 }

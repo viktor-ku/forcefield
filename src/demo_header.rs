@@ -1,21 +1,25 @@
 use anyhow::{bail, Result};
+use std::mem;
 
 use crate::HL2_MAX_OS_PATH;
 
 pub const DEMO_PROTOCOL: i32 = 3;
 pub const DEMO_HEADER_ID: &[u8] = b"HL2DEMO\0";
 
-/// Standard 4 bytes for integers and floats
-const INT_LEN: usize = 4;
-
-/// Total number of bytes to read from .dem file to extract the header info.
-///
-/// Accounts for:
-/// - standard demo id (fixed 8 bytes header)
-/// - 6 int/float numbers to read (4 bytes each)
-/// - 4 strings of data (260 bytes each)
-pub const DEMO_HEADER_BYTES_LEN: usize =
-    (6 * INT_LEN) + (HL2_MAX_OS_PATH * 4) + DEMO_HEADER_ID.len();
+#[repr(C)]
+struct DemoHeaderRaw {
+    demofilestamp: [u8; 8],
+    demoprotocol: i32,
+    networkprotocol: i32,
+    servername: [u8; HL2_MAX_OS_PATH],
+    clientname: [u8; HL2_MAX_OS_PATH],
+    mapname: [u8; HL2_MAX_OS_PATH],
+    gamedirectory: [u8; HL2_MAX_OS_PATH],
+    playback_time: f32,
+    playback_ticks: i32,
+    playback_frames: i32,
+    signonlength: i32,
+}
 
 #[derive(Debug)]
 pub struct DemoHeader {
@@ -41,98 +45,55 @@ pub struct DemoHeader {
 }
 
 impl DemoHeader {
+    fn hl2_string(buf: [u8; HL2_MAX_OS_PATH]) -> Result<String> {
+        let buf: Vec<u8> = buf
+            .iter()
+            .take_while(|val| **val != 0)
+            .map(|x| *x)
+            .collect();
+        Ok(String::from_utf8(buf)?)
+    }
+
     pub fn read(buf: &[u8]) -> Result<Self> {
-        let mut cur = 0;
+        let dh_id = &buf[..DEMO_HEADER_ID.len()];
 
-        let header = {
-            let b = &buf[cur..(cur + 8)];
-            cur += 8;
-            b
-        };
-
-        if header != DEMO_HEADER_ID {
-            bail!("expected hl2 demo")
+        if DEMO_HEADER_ID != dh_id {
+            bail!("expected hl2 demo file")
         }
 
-        let demo_protocol = {
-            let b = &buf[cur..(cur + 4)];
-            cur += 4;
-            i32::from_le_bytes([b[0], b[1], b[2], b[3]])
+        let buf = &buf[..mem::size_of::<DemoHeaderRaw>()];
+
+        // SAFETY:
+        // Before reading the entire header, we checked first 8 bytes,
+        // which turned out to be the expected header id (b"HL2DEMO\0").
+        // It's reasonable to assume that the file in question is indeed
+        // an hl2 demo file, thus reading the entire header with a pre
+        // known sturcture should be fine.
+        let dh: Option<&DemoHeaderRaw> = unsafe {
+            let (_, chunks, _) = buf.align_to::<DemoHeaderRaw>();
+            chunks.first()
         };
 
-        let net_protocol = {
-            let b = &buf[cur..(cur + 4)];
-            cur += 4;
-            i32::from_le_bytes([b[0], b[1], b[2], b[3]])
+        let dh = match dh {
+            Some(dh) => dh,
+            None => bail!("could not read demo header"),
         };
 
-        let server_name = {
-            let b = &buf[cur..(cur + HL2_MAX_OS_PATH)];
-            cur += HL2_MAX_OS_PATH;
-            let v: Vec<u8> = b.into_iter().map(|x| *x).take_while(|x| *x != 0).collect();
-            String::from_utf8(v)?
-        };
-
-        let client_name = {
-            let b = &buf[cur..(cur + HL2_MAX_OS_PATH)];
-            cur += HL2_MAX_OS_PATH;
-            let v: Vec<u8> = b.into_iter().map(|x| *x).take_while(|x| *x != 0).collect();
-            String::from_utf8(v)?
-        };
-
-        let map_name = {
-            let b = &buf[cur..(cur + HL2_MAX_OS_PATH)];
-            cur += HL2_MAX_OS_PATH;
-            let v: Vec<u8> = b.into_iter().map(|x| *x).take_while(|x| *x != 0).collect();
-            String::from_utf8(v)?
-        };
-
-        let game_dir = {
-            let b = &buf[cur..(cur + HL2_MAX_OS_PATH)];
-            cur += HL2_MAX_OS_PATH;
-            let v: Vec<u8> = b.into_iter().map(|x| *x).take_while(|x| *x != 0).collect();
-            String::from_utf8(v)?
-        };
-
-        let time = {
-            let b = &buf[cur..(cur + 4)];
-            cur += 4;
-            f32::from_ne_bytes([b[0], b[1], b[2], b[3]])
-        };
-
-        let ticks = {
-            let b = &buf[cur..(cur + 4)];
-            cur += 4;
-            i32::from_ne_bytes([b[0], b[1], b[2], b[3]])
-        };
-
-        let frames = {
-            let b = &buf[cur..(cur + 4)];
-            cur += 4;
-            i32::from_ne_bytes([b[0], b[1], b[2], b[3]])
-        };
-
-        let sign_on_length = {
-            let b = &buf[cur..(cur + 4)];
-            cur += 4;
-            i32::from_ne_bytes([b[0], b[1], b[2], b[3]])
-        };
-
-        if cur != DEMO_HEADER_BYTES_LEN {
-            bail!("bytes actually read from the header and bytes expected to read were different?")
+        if dh.demoprotocol != DEMO_PROTOCOL {
+            bail!("only known demo protocol at this time is 3")
         }
 
         Ok(DemoHeader {
-            demo_protocol,
-            net_protocol,
-            server_name,
-            client_name,
-            map_name,
-            game_dir,
-            time,
-            ticks,
-            frames,
-            sign_on_length,
+            demo_protocol: dh.demoprotocol,
+            net_protocol: dh.networkprotocol,
+            server_name: DemoHeader::hl2_string(dh.servername)?,
+            client_name: DemoHeader::hl2_string(dh.clientname)?,
+            map_name: DemoHeader::hl2_string(dh.mapname)?,
+            game_dir: DemoHeader::hl2_string(dh.gamedirectory)?,
+            time: dh.playback_time,
+            ticks: dh.playback_ticks,
+            frames: dh.playback_frames,
+            sign_on_length: dh.signonlength,
         })
     }
 }
