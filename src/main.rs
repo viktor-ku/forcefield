@@ -1,6 +1,6 @@
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
+use clap::{Parser, Subcommand};
 use std::{fs, path::PathBuf};
-use clap::{Subcommand, Parser};
 
 mod demo_header;
 use demo_header::DemoHeader;
@@ -54,10 +54,21 @@ pub struct Frame {
 }
 
 fn body(buf: &[u8]) {
-    println!("{:?}", buf.chunks(4).collect::<Vec<_>>().iter().take(100).collect::<Vec<_>>());
-    println!("{:?}", buf.chunks_exact(4).map(|x| {
-        i32::from_ne_bytes([x[0], x[1], x[2], x[3]])
-    }).take(100).collect::<Vec<_>>());
+    println!(
+        "{:?}",
+        buf.chunks(4)
+            .collect::<Vec<_>>()
+            .iter()
+            .take(100)
+            .collect::<Vec<_>>()
+    );
+    println!(
+        "{:?}",
+        buf.chunks_exact(4)
+            .map(|x| { i32::from_ne_bytes([x[0], x[1], x[2], x[3]]) })
+            .take(100)
+            .collect::<Vec<_>>()
+    );
     // let mut i = 0;
     // while i < buf.len() {
     //     let size = {
@@ -72,7 +83,7 @@ fn body(buf: &[u8]) {
 #[derive(Debug, Parser)]
 struct Cli {
     /// path to the demo file (.dem) to inspect
-    dem: PathBuf
+    dem: PathBuf,
 }
 
 fn main() -> Result<()> {

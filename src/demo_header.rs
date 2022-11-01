@@ -14,7 +14,8 @@ const INT_LEN: usize = 4;
 /// - standard demo id (fixed 8 bytes header)
 /// - 6 int/float numbers to read (4 bytes each)
 /// - 4 strings of data (260 bytes each)
-pub const DEMO_HEADER_BYTES_LEN: usize = (6 * INT_LEN) + (HL2_MAX_OS_PATH * 4) + DEMO_HEADER_ID.len();
+pub const DEMO_HEADER_BYTES_LEN: usize =
+    (6 * INT_LEN) + (HL2_MAX_OS_PATH * 4) + DEMO_HEADER_ID.len();
 
 #[derive(Debug)]
 pub struct DemoHeader {
